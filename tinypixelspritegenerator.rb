@@ -1,6 +1,6 @@
 #!ruby -Ku
 # -*- mode: ruby; coding: utf-8 -*-
-# Last updated: <2017/04/04 20:52:25 +0900>
+# Last updated: <2017/04/06 08:06:01 +0900>
 #
 # tiny pixel sprite generator
 #
@@ -9,6 +9,8 @@
 # https://github.com/zfedoran/pixel-sprite-generator
 #
 # License : MIT License
+
+require 'pp'
 
 # tiny pixel sprite generator
 class TinyPixelSpriteGenerator
@@ -22,8 +24,77 @@ class TinyPixelSpriteGenerator
   # @return [Array<Integer>] pixel data. R,G,B,A * width * height.
   attr_accessor :pixel_data
 
+  # mask pattern
+  # " " or "0" = empty
+  # "." or "1" = body or empty
+  # "+" or "2" = border or body
+  # "*" or "3" = border
+  MASK_PAT = {
+    "spaceship" => {
+      # 6x12 (12x12) dot
+      :mirror_x => true,
+      :mirror_y => false,
+      :mask => [
+        # 12345
+        '      ', # 0
+        '    11', # 1
+        '    13', # 2
+        '   113', # 3
+        '   113', # 4
+        '  1113', # 5
+        ' 11122', # 6
+        ' 11122', # 7
+        ' 11122', # 8
+        ' 11113', # 9
+        '   111', # 10
+        '      ', # 11
+      ],
+    },
+    "dragon" => {
+      # 12x12 dot
+      :mirror_x => false,
+      :mirror_y => false,
+      :mask => [
+        # 12345678901
+        '            ', # 0
+        '    1111    ', # 1
+        '   112211   ', # 2
+        '  11122111  ', # 3
+        '    1111111 ', # 4
+        '      11111 ', # 5
+        '      11111 ', # 6
+        '    1111111 ', # 7
+        '  11111111  ', # 8
+        '   111111   ', # 9
+        '    1111    ', # 10
+        '            ', # 11
+      ],
+    },
+    "robot" => {
+      # 4x11 (8x11) dot
+      :mirror_x => true,
+      :mirror_y => false,
+      :mask => [
+        # 123
+        '    ', # 0
+        ' 111', # 1
+        ' 122', # 2
+        '  12', # 3
+        '   2', # 4
+        '1112', # 5
+        ' 112', # 6
+        '   2', # 7
+        '   2', # 8
+        ' 122', # 9
+        '11  ', # 10
+      ],
+    }
+  }
+
   # initialize
-  # @param maskdata [Array<Array>] mask data.
+  # @param maskdata [Array, String] mask data.
+  #                                 "spaceship" or "dragon" or "robot"
+  #                                 or Array<String>
   #                                 -1 = always border (black).
   #                                 0 = empty.
   #                                 1 = Randomly chosen empty/body.
@@ -36,23 +107,46 @@ class TinyPixelSpriteGenerator
   # @param brightnessnoise [Float] brightness noise. default 0.3
   # @param saturation [Float] saturation. default 0.5
   # @param seed [Integer] random seed
+  # @param scale_x [Integer] scale x pixel data
+  # @param scale_y [Integer] scale y pixel data
   def initialize(maskdata,
-                 mirror_x: true,
-                 mirror_y: true,
+                 mirror_x: false,
+                 mirror_y: false,
                  colored: true,
                  edgebrightness: 0.3,
                  colorvariations: 0.2,
                  brightnessnoise: 0.3,
                  saturation: 0.5,
-                 seed: 0
+                 seed: 0,
+                 scale_x: 1,
+                 scale_y: 1
                 )
-    @mask_data = maskdata
-    @mask_height = maskdata.size
-    @mask_width = maskdata[0].size
-    @mirror_x = mirror_x
-    @mirror_y = mirror_y
-    @width = @mask_width * ((mirror_x)? 2 : 1)
-    @height = @mask_height * ((mirror_y)? 2 : 1)
+
+    if maskdata.instance_of?(String)
+      if MASK_PAT.key?(maskdata)
+        dt = MASK_PAT[maskdata]
+        mask = dt[:mask]
+        @mirror_x = dt[:mirror_x]
+        @mirror_y = dt[:mirror_y]
+      else
+        puts "Error : Unknown mask type #{maskdata}"
+        return nil
+      end
+    elsif maskdata.instance_of?(Array)
+      mask = maskdata
+      @mirror_x = mirror_x
+      @mirror_y = mirror_y
+    else
+      puts "Error : Unknown mask #{maskdata}"
+      return nil
+    end
+
+    @maskdata = TinyPixelSpriteGenerator.conv_mask(mask)
+    @mask_height = @maskdata.size
+    @mask_width = @maskdata[0].size
+
+    @width = @mask_width * ((@mirror_x)? 2 : 1)
+    @height = @mask_height * ((@mirror_y)? 2 : 1)
     @colored = colored
     @edgebrightness = edgebrightness
     @colorvariations = colorvariations
@@ -67,6 +161,12 @@ class TinyPixelSpriteGenerator
     mirror_data_y if @mirror_y
     generate_edges
     @pixel_data = render_pixel_data
+
+    if scale_x > 1 or scale_y > 1
+      @pixel_data = scale_pixel_data(scale_x, scale_y)
+      @width = @pixel_data[0].size
+      @height = @pixel_data.size
+    end
   end
 
   def init_data
@@ -74,7 +174,7 @@ class TinyPixelSpriteGenerator
 
     # apply mask
     @mask_height.times do |y|
-      @mask_width.times { |x| @data[y][x] = @mask_data[y][x] }
+      @mask_width.times { |x| @data[y][x] = @maskdata[y][x] }
     end
   end
 
@@ -205,14 +305,36 @@ class TinyPixelSpriteGenerator
     return rgb
   end
 
-  # string array to mask array
+  def scale_pixel_data(scale_x, scale_y)
+    nw = (@width * scale_x).to_i
+    nh = (@height * scale_y).to_i
+    newdt = []
+    nh.times do |y|
+      dt = []
+      nw.times do |x|
+        sx = (x * @width / nw).to_i
+        sy = (y * @height / nh).to_i
+        d = []
+        @pixel_data[sy][sx].each { |v| d.push(v) }
+        dt.push(d)
+      end
+      newdt.push(dt)
+    end
+    return newdt
+  end
+
+  # convert string array to mask array
   # @param str_array [Array<String>] string array
   #                                  "0" or " " = empty
   #                                  "1" or "." = Randomly chosen Empty/Body
   #                                  "2" or "+" = Randomly chosen Border/Body
   #                                  "3" or "*" = Always border (black)
   # @return [Array<Array>] mask array
-  def self.convert_mask(str_array)
+  #                        -1 = always border (black).
+  #                        0 = empty.
+  #                        1 = Randomly chosen empty/body.
+  #                        2 = Randomly chosen border/body.
+  def self.conv_mask(str_array)
     result = []
     str_array.each do |s|
       slst = s.split("")
@@ -254,79 +376,61 @@ if $0 == __FILE__
     return img
   end
 
-  mask_spaceship = [
-    [
-      # 0 : 12x12
-      '000000',
-      '000011',
-      '000013',
-      '000113',
-      '000113',
-      '001113',
-      '011122',
-      '011122',
-      '011122',
-      '011113',
-      '000111',
-      '000000',
-    ],[
-      # 1 : 16x16
-      '        ',
-      '      ..',
-      '      .*',
-      '     ..*',
-      '     ..+',
-      '    ...+',
-      '   ....*',
-      '   ....*',
-      '  ....++',
-      ' ....+++',
-      ' ....+++',
-      ' ......*',
-      ' ......*',
-      ' ......*',
-      '    ....',
-      '        ',
-    ],[
-      # 2: 24x24
-      '            ',
-      '           .',
-      '           .',
-      '          ..',
-      '         ..*',
-      '         ..*',
-      '      .....*',
-      '      .....+',
-      '     .....++',
-      '     .....++',
-      '     .....++',
-      '     ......+',
-      '     ......*',
-      '    .......*',
-      '    .......*',
-      '   ........*',
-      '   .......++',
-      '  .......+++',
-      '  .......+++',
-      ' .........++',
-      ' ..........*',
-      '     .......',
-      '       .....',
-      '            ',
-    ]
+  imgs = []
+
+  # generate pixelart "spaceship"
+  32.times do |i|
+    p = TinyPixelSpriteGenerator.new("spaceship", seed: i)
+    imgs.push(array_to_image(p.pixel_data))
+  end
+
+  # generate pixelart "dragon"
+  32.times do |i|
+    p = TinyPixelSpriteGenerator.new("dragon", seed: i)
+    imgs.push(array_to_image(p.pixel_data))
+  end
+
+  # generate pixelart "robot"
+  32.times do |i|
+    p = TinyPixelSpriteGenerator.new("robot", colored: false, seed: i)
+    imgs.push(array_to_image(p.pixel_data))
+  end
+
+  # generate pixelart with custom mask pattern
+  # " " = empty
+  # "." = body or empty
+  # "+" = border or body
+  # "*" = border
+  mask_spaceship_24x24 = [
+    '            ',
+    '           .',
+    '          ..',
+    '         ...',
+    '        ...*',
+    '       ....*',
+    '      .....*',
+    '      .....+',
+    '     .....++',
+    '     .....++',
+    '     ......+',
+    '     ......+',
+    '     ......*',
+    '    .......*',
+    '    .......*',
+    '   ........*',
+    '   .......++',
+    '  .......+++',
+    '  .......+++',
+    ' .........++',
+    ' ..........*',
+    '    .......*',
+    '      ......',
+    '            ',
   ]
 
-  # convert mask array
-  kind = (ARGV.empty?)? 2 : ARGV[0].to_i
-  mask = TinyPixelSpriteGenerator.convert_mask(mask_spaceship[kind])
-
-  # make images
-  imgs = []
-  96.times do |i|
-
-    # generate pixels array
+  32.times do |i|
     p = TinyPixelSpriteGenerator.new(
-      mask,
+      mask_spaceship_24x24,
       mirror_x: true,
       mirror_y: false,
       colored: true,
@@ -334,12 +438,19 @@ if $0 == __FILE__
       colorvariations: 0.2,
       brightnessnoise: 0.3,
       saturation: 0.5,
-      seed: i * 4
+      seed: i
     )
-    img = array_to_image(p.pixel_data)
-    imgs.push(img)
+    imgs.push(array_to_image(p.pixel_data))
   end
 
+  # generate pixelart "spaceship" and scale
+  12.times do |i|
+    p = TinyPixelSpriteGenerator.new("spaceship", seed: i,
+                                     scale_x: 2, scale_y: 3)
+    imgs.push(array_to_image(p.pixel_data))
+  end
+
+  # Windows setting
   Window.resize(320, 240)
   Window.bgcolor = [64, 132, 184]
   Window.scale = 3
@@ -347,13 +458,15 @@ if $0 == __FILE__
   # main loop
   Window.loop do
     break if Input.keyPush?(K_ESCAPE)
+
     x, y = 0, 0
     imgs.each do |img|
       Window.draw(x, y, img)
-      x += img.width + 2
+
+      x += img.width + 4
       if x + img.width >= Window.width
         x = 0
-        y += img.height + 2
+        y += img.height + 4
       end
     end
   end

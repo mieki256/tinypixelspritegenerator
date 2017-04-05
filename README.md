@@ -13,11 +13,7 @@ Screenshot
 
 DXRuby を使ってテスト表示。3倍に拡大表示。
 
-![12x12](./screenshot/spaceship_12x12.png)
-
-![16x16](./screenshot/spaceship_16x16.png)
-
-![24x24](./screenshot/spaceship_24x24.png)
+![all type](./screenshot/all_type.png)
 
 Requirement
 -----------
@@ -27,9 +23,28 @@ Ruby 2.2以上。
 Usage
 -----
 
-    require_relative 'tinypixelspritegenerator'
+### generate pixelart "spaceship". 12 x 12 dot
 
-    mask_spaceship = [
+    require_relative 'tinypixelspritegenerator'
+    psg = TinyPixelSpriteGenerator.new("spaceship", seed: 43291)
+    p psg.pixel_data
+
+### generate pixelart "dragon". 12 x 12 dot
+
+    require_relative 'tinypixelspritegenerator'
+    psg = TinyPixelSpriteGenerator.new("dragon", seed: 29080)
+    p psg.pixel_data
+
+### generate pixelart "robot". 8 x 11 dot.
+
+    require_relative 'tinypixelspritegenerator'
+    psg = TinyPixelSpriteGenerator.new("robot", seed: 57343)
+    p psg.pixel_data
+
+### generate pixelart with custom mask pattern
+
+    require_relative 'tinypixelspritegenerator'
+    mask = [
       # 12x12
       # "0" or " " = empty
       # "1" or "." = Randomly chosen Empty/Body
@@ -48,12 +63,7 @@ Usage
       '000111',
       '000000',
     ]
-
-    # convert mask array
-    mask = TinyPixelSpriteGenerator.convert_mask(mask_spaceship)
-
-    # generate pixels array
-    p = TinyPixelSpriteGenerator.new(
+    psg = TinyPixelSpriteGenerator.new(
       mask,
       mirror_x: true,
       mirror_y: false,
@@ -64,8 +74,13 @@ Usage
       saturation: 0.5,
       seed: rand(65536)
     )
+    p psg.pixel_data
 
-    pp p.pixel_data
+### generate pixelart "spaceship". 12 x 12 dot -> 24 x 24 dot
+
+    require_relative 'tinypixelspritegenerator'
+    psg = TinyPixelSpriteGenerator.new("spaceship", scale_x: 2, scale_y: 2, seed: 10507)
+    p psg.pixel_data
 
 Licence
 -------

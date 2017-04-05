@@ -1,11 +1,10 @@
 #!ruby -Ku
 # -*- mode: ruby; coding: utf-8 -*-
-# Last updated: <2017/04/04 20:48:46 +0900>
+# Last updated: <2017/04/06 00:03:32 +0900>
 #
 # test draw by DXRuby
 
 require 'dxruby'
-require 'pp'
 require_relative '../tinypixelspritegenerator'
 
 # array to DXRuby Image
@@ -23,7 +22,7 @@ def array_to_image(a)
   return img
 end
 
-mask_spaceship = [
+mask = [
   # 12x12
   # "0" or " " = empty
   # "1" or "." = Randomly chosen Empty/Body
@@ -43,10 +42,7 @@ mask_spaceship = [
   '000000',
 ]
 
-# convert mask array
-mask = TinyPixelSpriteGenerator.convert_mask(mask_spaceship)
-
-# generate pixels array
+# generate pixelart
 p = TinyPixelSpriteGenerator.new(
   mask,
   mirror_x: true,
@@ -58,16 +54,12 @@ p = TinyPixelSpriteGenerator.new(
   saturation: 0.5,
   seed: rand(65536)
 )
-
-# pp p.pixel_data
-
 img = array_to_image(p.pixel_data)
 
 Window.resize(240, 180)
 Window.bgcolor = [64, 132, 184]
-Window.scale = 4
+Window.scale = 3
 
-# main loop
 Window.loop do
   break if Input.keyPush?(K_ESCAPE)
   Window.draw(0, 0, img)
